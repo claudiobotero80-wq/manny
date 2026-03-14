@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-// Using BFL API directly (Black Forest Labs) with FLUX.2 Klein 4B
+// Using BFL API (Black Forest Labs) with FLUX.2 Klein 4B
 // BFL key stored in BFL_API_KEY env var
-// Async pattern: POST → get task_id → poll GET /v1/get_result?id=<task_id>
+// Async: POST → returns { id, polling_url } → poll polling_url every 2s
 const BFL_BASE = 'https://api.bfl.ai'
 const BFL_MODEL = 'flux-2-klein-4b' // fast + cheap; upgrade to flux-2-klein-9b for higher quality
 
@@ -12,10 +12,10 @@ const styleModifiers: Record<string, string> = {
   dark: 'dark background, moody lighting, dramatic shadows',
 }
 
-async function pollResult(taskId: string, apiKey: string, maxAttempts = 20): Promise<string> {
+async function pollResult(pollingUrl: string, apiKey: string, maxAttempts = 25): Promise<string> {
   for (let i = 0; i < maxAttempts; i++) {
     await new Promise((r) => setTimeout(r, 2000))
-    const res = await fetch(`${BFL_BASE}/v1/get_result?id=${taskId}`, {
+    const res = await fetch(pollingUrl, {
       headers: { 'x-key': apiKey },
     })
     if (!res.ok) throw new Error(`Poll failed: ${res.status}`)
@@ -65,12 +65,12 @@ export async function POST(request: NextRequest) {
       throw new Error(`BFL submit failed (${submitRes.status}): ${errBody}`)
     }
 
-    const submitData = await submitRes.json() as { id?: string }
-    const taskId = submitData.id
-    if (!taskId) throw new Error('BFL returned no task ID')
+    const submitData = await submitRes.json() as { id?: string; polling_url?: string }
+    const pollingUrl = submitData.polling_url
+    if (!pollingUrl) throw new Error('BFL returned no polling_url')
 
-    // Step 2: Poll for result
-    const imageUrl = await pollResult(taskId, apiKey)
+    // Step 2: Poll using the polling_url from the response (may be a regional endpoint)
+    const imageUrl = await pollResult(pollingUrl, apiKey)
 
     return NextResponse.json({ imageUrl })
   } catch (err) {
