@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fal } from '@fal-ai/client'
 
+// TODO: Switch to FLUX.2 Klein (fal-ai/flux-2/klein or similar) once it becomes
+// available on FAL.ai. As of 2025-03, the model is NOT yet listed in the FAL catalog
+// (all candidate IDs return 404). Using fal-ai/flux/schnell as fallback.
+// Track: https://fal.ai/models — search for "flux-2" or "FLUX.2 Klein"
+const IMAGE_MODEL = 'fal-ai/flux/schnell' // fallback: FLUX.2 Klein not yet on FAL
+
 const styleModifiers: Record<string, string> = {
   default: 'professional photography, high quality, well-lit',
   food: 'food photography, natural lighting, appetizing, restaurant quality',
@@ -16,7 +22,7 @@ export async function POST(request: NextRequest) {
     const modifier = styleModifiers[style] ?? styleModifiers.default
     const enrichedPrompt = `${prompt}, ${modifier}, 4k, photorealistic`
 
-    const result = await fal.subscribe('fal-ai/flux/schnell', {
+    const result = await fal.subscribe(IMAGE_MODEL, {
       input: {
         prompt: enrichedPrompt,
         image_size: 'square_hd',

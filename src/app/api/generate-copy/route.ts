@@ -17,7 +17,7 @@ Máximo: ${fieldType === 'titulo' ? '50' : fieldType === 'cta' ? '30' : '120'} c
 Respondé SOLO con el texto, sin comillas.`
 
     const completion = await groq.chat.completions.create({
-      model: 'llama-3.1-70b-versatile',
+      model: 'llama-3.3-70b-versatile', // upgraded from llama-3.1-70b-versatile (decommissioned)
       messages: [
         { role: 'system', content: systemPrompt },
         { role: 'user', content: userPrompt },
