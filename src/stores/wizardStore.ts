@@ -57,7 +57,7 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
     set((state) => {
       const fields = get().getActiveFields()
       return {
-        currentStep: Math.min(state.currentStep + 1, Math.max(0, fields.length - 1)),
+        currentStep: Math.min(state.currentStep + 1, fields.length),
       }
     }),
 

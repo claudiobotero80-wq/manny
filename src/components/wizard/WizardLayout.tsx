@@ -165,7 +165,7 @@ export function WizardLayout() {
         <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
           <Button
             variant="outline"
-            onClick={isColorStep ? () => prevStep() : prevStep}
+            onClick={prevStep}
             disabled={currentStep === 0 && !isColorStep}
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
