@@ -9,33 +9,64 @@ import { Button } from '@/components/ui/button'
 import { Progress } from '@/components/ui/progress'
 import { ChevronLeft, ChevronRight, Download, Loader2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
+import { SvgTemplate } from '@/types'
 
 export function WizardLayout() {
-  const { template, currentStep, values, colorScheme, setValue, setColorScheme, nextStep, prevStep, isComplete } =
-    useWizardStore()
+  const {
+    template,
+    currentStep,
+    values,
+    colorScheme,
+    setValue,
+    setColorScheme,
+    nextStep,
+    prevStep,
+    isComplete,
+    getActiveFields,
+    dynamicFieldsLoading,
+    isSvgTemplate,
+  } = useWizardStore()
   const [downloading, setDownloading] = useState(false)
   const router = useRouter()
 
   if (!template) return null
 
-  const field = template.fields[currentStep]
-  const totalSteps = template.fields.length
-  const progress = ((currentStep + 1) / (totalSteps + 1)) * 100 // +1 for color step at end
+  const activeFields = getActiveFields()
+  const field = activeFields[currentStep]
+  const totalSteps = activeFields.length
+  const progress = totalSteps > 0 ? ((currentStep + 1) / (totalSteps + 1)) * 100 : 0
+
+  const isSvg = isSvgTemplate()
+  const svgUrl = isSvg ? (template as SvgTemplate).svgUrl : undefined
 
   async function handleDownload() {
     if (!colorScheme) return
     setDownloading(true)
     try {
-      const res = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: template!.id,
-          values,
-          colorScheme,
-          dimensions: template!.dimensions,
-        }),
-      })
+      let res: Response
+      if (isSvg && svgUrl) {
+        res = await fetch('/api/render-svg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            svgUrl,
+            values,
+            colorScheme,
+            dimensions: template!.dimensions,
+          }),
+        })
+      } else {
+        res = await fetch('/api/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateId: template!.id,
+            values,
+            colorScheme,
+            dimensions: template!.dimensions,
+          }),
+        })
+      }
 
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -54,6 +85,18 @@ export function WizardLayout() {
   const isLastStep = currentStep === totalSteps - 1
   const isColorStep = currentStep >= totalSteps
 
+  // Loading state for SVG dynamic fields
+  if (isSvg && dynamicFieldsLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <Loader2 className="w-8 h-8 animate-spin text-zinc-400" />
+          <p className="text-sm text-zinc-500">Cargando campos del template...</p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Left: Wizard */}
@@ -69,6 +112,11 @@ export function WizardLayout() {
           </button>
           <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{template.name}</h1>
           <p className="text-sm text-zinc-500 mt-1">{template.description}</p>
+          {isSvg && (
+            <span className="inline-block mt-2 px-2 py-0.5 text-xs bg-violet-100 text-violet-700 rounded-full">
+              Template SVG
+            </span>
+          )}
           <div className="mt-4">
             <Progress value={progress} className="h-1.5" />
             <p className="text-xs text-zinc-400 mt-1">
@@ -91,7 +139,7 @@ export function WizardLayout() {
                 onSelect={setColorScheme}
               />
             </div>
-          ) : (
+          ) : field ? (
             <div className="space-y-6">
               <div>
                 <h2 className="text-lg font-semibold mb-1">
@@ -106,6 +154,10 @@ export function WizardLayout() {
                 vertical={template.category}
               />
             </div>
+          ) : (
+            <div className="flex items-center justify-center h-full">
+              <p className="text-sm text-zinc-400">No hay campos configurados.</p>
+            </div>
           )}
         </div>
 
@@ -113,7 +165,7 @@ export function WizardLayout() {
         <div className="p-6 border-t border-zinc-200 dark:border-zinc-800 flex items-center justify-between gap-3">
           <Button
             variant="outline"
-            onClick={isColorStep ? () => nextStep() : prevStep}
+            onClick={isColorStep ? () => prevStep() : prevStep}
             disabled={currentStep === 0 && !isColorStep}
           >
             <ChevronLeft className="w-4 h-4 mr-1" />
@@ -121,7 +173,7 @@ export function WizardLayout() {
           </Button>
 
           <div className="flex gap-2">
-            {isColorStep || isComplete() ? (
+            {(isColorStep || isComplete()) ? (
               <Button onClick={handleDownload} disabled={downloading} className="bg-zinc-900 text-white">
                 {downloading ? (
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -152,6 +204,7 @@ export function WizardLayout() {
             templateId={template.id}
             values={values}
             colorScheme={colorScheme}
+            svgUrl={svgUrl}
           />
           <p className="text-center text-xs text-zinc-400 mt-3">Vista previa en tiempo real</p>
         </div>
