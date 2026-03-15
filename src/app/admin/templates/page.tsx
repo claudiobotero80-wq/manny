@@ -101,32 +101,15 @@ export default function AdminTemplatesPage() {
     setStatus({ type: 'uploading', message: 'Subiendo SVG...' })
 
     try {
-      // 1. Upload SVG to Supabase Storage
-      const storageUrl = `${SUPABASE_URL}/storage/v1/object/templates/${formId}.svg`
-      const uploadRes = await fetch(storageUrl, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${SERVICE_ROLE_KEY || SUPABASE_ANON_KEY}`,
-          'Content-Type': 'image/svg+xml',
-          'x-upsert': 'true',
-        },
-        body: svgContent,
-      })
-
-      if (!uploadRes.ok) {
-        const errText = await uploadRes.text()
-        throw new Error(`Upload failed: ${errText}`)
-      }
-
+      // Storage + DB via server API (service role, bypasses RLS)
       const publicSvgUrl = `${SUPABASE_URL}/storage/v1/object/public/templates/${formId}.svg`
 
-      setStatus({ type: 'uploading', message: 'Guardando en base de datos...' })
-
-      // 2. Insert into manny_templates via server API (service role, bypasses RLS)
-      const dbRes = await fetch('/api/admin/save-template', {
+      const res = await fetch('/api/admin/save-template', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+          svgContent,
+          templateId: formId,
           id: formId,
           name: formName,
           description: formDescription,
@@ -143,9 +126,9 @@ export default function AdminTemplatesPage() {
         }),
       })
 
-      if (!dbRes.ok) {
-        const errData = await dbRes.json()
-        throw new Error(`DB insert failed: ${errData.error || dbRes.statusText}`)
+      if (!res.ok) {
+        const errData = await res.json()
+        throw new Error(errData.error || res.statusText)
       }
 
       setStatus({ type: 'success', message: `Template "${formName}" guardado correctamente.` })

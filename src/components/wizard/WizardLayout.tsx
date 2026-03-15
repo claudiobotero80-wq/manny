@@ -56,6 +56,40 @@ export function WizardLayout() {
   }
 
   async function handleFinalizar() {
+    const DEV_MODE = process.env.NEXT_PUBLIC_DEV_MODE === 'true'
+
+    // DEV MODE: skip auth + payment, go straight to download
+    if (DEV_MODE) {
+      setFinalizando(true)
+      try {
+        const isSvgTemplate = template?.type === 'svg'
+        const endpoint = isSvgTemplate ? '/api/render-svg' : '/api/render'
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateId: template!.id,
+            fields: values,
+            colorScheme,
+          }),
+        })
+        if (!res.ok) throw new Error('Render failed')
+        const blob = await res.blob()
+        const url = URL.createObjectURL(blob)
+        const a = document.createElement('a')
+        a.href = url
+        a.download = `${template!.id}-preview.png`
+        a.click()
+        URL.revokeObjectURL(url)
+      } catch (err) {
+        console.error('Dev download error:', err)
+      } finally {
+        setFinalizando(false)
+      }
+      return
+    }
+
+    // PROD: auth check → save → checkout
     setFinalizando(true)
     try {
       const supabase = createClient()
