@@ -41,6 +41,21 @@ export interface Template {
   fields: TemplateField[]
   colorSchemes: ColorScheme[]
   component: string
+  type?: 'jsx' | 'svg'
+  svgUrl?: string
+}
+
+export interface SvgTemplate {
+  id: string
+  name: string
+  description: string
+  category: string
+  previewImage: string
+  dimensions: { width: number; height: number }
+  type: 'svg'
+  svgUrl: string
+  colorSchemes: ColorScheme[]
+  // NO fields — detected dynamically from SVG
 }
 
 export interface WizardSession {

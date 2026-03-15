@@ -33,9 +33,16 @@ export function TemplateCard({ template }: TemplateCardProps) {
             <CardTitle className="text-base">{template.name}</CardTitle>
             <CardDescription className="text-sm mt-0.5">{template.description}</CardDescription>
           </div>
-          <span className="shrink-0 text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full text-zinc-500 capitalize">
-            {template.category}
-          </span>
+          <div className="flex flex-col items-end gap-1">
+            <span className="shrink-0 text-xs bg-zinc-100 dark:bg-zinc-800 px-2 py-1 rounded-full text-zinc-500 capitalize">
+              {template.category}
+            </span>
+            {template.type === 'svg' && (
+              <span className="shrink-0 text-xs bg-violet-100 dark:bg-violet-900 px-2 py-0.5 rounded-full text-violet-600 dark:text-violet-300">
+                SVG
+              </span>
+            )}
+          </div>
         </div>
       </CardHeader>
 

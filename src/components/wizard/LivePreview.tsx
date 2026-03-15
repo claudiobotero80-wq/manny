@@ -8,9 +8,11 @@ interface LivePreviewProps {
   templateId: string
   values: Record<string, string>
   colorScheme: ColorScheme | null
+  // For SVG templates
+  svgUrl?: string
 }
 
-export function LivePreview({ templateId, values, colorScheme }: LivePreviewProps) {
+export function LivePreview({ templateId, values, colorScheme, svgUrl }: LivePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -18,16 +20,27 @@ export function LivePreview({ templateId, values, colorScheme }: LivePreviewProp
     if (!colorScheme) return
     setLoading(true)
     try {
-      const params = new URLSearchParams({
-        templateId,
-        values: JSON.stringify(values),
-        colorScheme: JSON.stringify(colorScheme),
-      })
-      setPreviewUrl(`/api/render?${params.toString()}`)
+      if (svgUrl) {
+        // SVG template: use render-svg endpoint
+        const params = new URLSearchParams({
+          svgUrl,
+          values: JSON.stringify(values),
+          colorScheme: JSON.stringify(colorScheme),
+        })
+        setPreviewUrl(`/api/render-svg?${params.toString()}`)
+      } else {
+        // JSX template: use legacy render endpoint
+        const params = new URLSearchParams({
+          templateId,
+          values: JSON.stringify(values),
+          colorScheme: JSON.stringify(colorScheme),
+        })
+        setPreviewUrl(`/api/render?${params.toString()}`)
+      }
     } finally {
       setLoading(false)
     }
-  }, [templateId, values, colorScheme])
+  }, [templateId, values, colorScheme, svgUrl])
 
   useEffect(() => {
     const timeout = setTimeout(fetchPreview, 500)

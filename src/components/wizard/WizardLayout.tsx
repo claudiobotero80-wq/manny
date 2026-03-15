@@ -15,8 +15,20 @@ import { LoginModal } from '@/components/auth/LoginModal'
 const WIZARD_INTENT_KEY = 'manny_wizard_intent'
 
 export function WizardLayout() {
-  const { template, currentStep, values, colorScheme, setValue, setColorScheme, nextStep, prevStep, isComplete } =
-    useWizardStore()
+  const {
+    template,
+    currentStep,
+    values,
+    colorScheme,
+    setValue,
+    setColorScheme,
+    nextStep,
+    prevStep,
+    isComplete,
+    getActiveFields,
+    dynamicFieldsLoading,
+    isSvgTemplate,
+  } = useWizardStore()
   const [downloading, setDownloading] = useState(false)
   const [finalizando, setFinalizando] = useState(false)
   const [showLoginModal, setShowLoginModal] = useState(false)
@@ -89,16 +101,30 @@ export function WizardLayout() {
     if (!colorScheme) return
     setDownloading(true)
     try {
-      const res = await fetch('/api/render', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          templateId: template!.id,
-          values,
-          colorScheme,
-          dimensions: template!.dimensions,
-        }),
-      })
+      let res: Response
+      if (isSvg && svgUrl) {
+        res = await fetch('/api/render-svg', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            svgUrl,
+            values,
+            colorScheme,
+            dimensions: template!.dimensions,
+          }),
+        })
+      } else {
+        res = await fetch('/api/render', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            templateId: template!.id,
+            values,
+            colorScheme,
+            dimensions: template!.dimensions,
+          }),
+        })
+      }
 
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
