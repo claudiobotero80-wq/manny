@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient as createSupabaseClient } from '@supabase/supabase-js'
 
-// Use service client (no cookie needed — webhook has no user session)
 function getServiceClient() {
   return createSupabaseClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,19 +10,49 @@ function getServiceClient() {
 
 const BASE_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'https://manny-v2.vercel.app'
 
-async function generateAndStorePNG(pieceId: string, piece: { template_id: string; fields_json: Record<string, string>; colors_json: Record<string, unknown> }) {
+async function generateAndStorePNG(
+  pieceId: string,
+  piece: {
+    template_id: string
+    fields_json: Record<string, string>
+    colors_json: Record<string, unknown>
+  }
+): Promise<string | null> {
   try {
-    // Call our own render endpoint to get the PNG
-    const renderRes = await fetch(`${BASE_URL}/api/render`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        templateId: piece.template_id,
-        values: piece.fields_json,
-        colorScheme: piece.colors_json,
-        dimensions: { width: 1080, height: 1080 },
-      }),
-    })
+    const supabase = getServiceClient()
+
+    // Check if this is an SVG template
+    const { data: tmpl } = await supabase
+      .from('manny_templates')
+      .select('type, svg_url')
+      .eq('id', piece.template_id)
+      .maybeSingle()
+
+    let renderRes: Response
+
+    if (tmpl?.type === 'svg' && tmpl.svg_url) {
+      renderRes = await fetch(`${BASE_URL}/api/render-svg`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          svgUrl: tmpl.svg_url,
+          values: piece.fields_json,
+          colorScheme: piece.colors_json,
+          dimensions: { width: 1080, height: 1080 },
+        }),
+      })
+    } else {
+      renderRes = await fetch(`${BASE_URL}/api/render`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          templateId: piece.template_id,
+          values: piece.fields_json,
+          colorScheme: piece.colors_json,
+          dimensions: { width: 1080, height: 1080 },
+        }),
+      })
+    }
 
     if (!renderRes.ok) {
       console.error('Render failed:', await renderRes.text())
@@ -33,7 +62,6 @@ async function generateAndStorePNG(pieceId: string, piece: { template_id: string
     const buffer = Buffer.from(await renderRes.arrayBuffer())
     const filename = `${pieceId}/final.png`
 
-    const supabase = getServiceClient()
     const { error: uploadError } = await supabase.storage
       .from('pieces')
       .upload(filename, buffer, {
@@ -66,7 +94,6 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // MP sends topic=payment with data.id or type=payment
     const topic = body.topic || body.type
     const dataId = body.data?.id || body.id
 
@@ -74,7 +101,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    // Fetch payment details from MP
     const { MercadoPagoConfig, Payment } = await import('mercadopago')
     const mp = new MercadoPagoConfig({ accessToken: mpToken })
     const payment = new Payment(mp)
@@ -91,7 +117,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = getServiceClient()
 
-    // Get piece data
     const { data: piece, error: pieceError } = await supabase
       .from('manny_pieces')
       .select('id, template_id, fields_json, colors_json, status')
@@ -103,15 +128,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ received: true })
     }
 
-    // Already paid — skip
     if (piece.status === 'paid') {
       return NextResponse.json({ received: true })
     }
 
-    // Generate PNG and store
     const imageUrl = await generateAndStorePNG(pieceId, piece)
 
-    // Update piece status
     await supabase
       .from('manny_pieces')
       .update({
