@@ -10,7 +10,6 @@ import { ColorScheme, SvgTemplate } from '@/types'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!
 
 const DEFAULT_PREVIEW_SCHEME: ColorScheme = {
   id: 'preview',
@@ -123,47 +122,30 @@ export default function AdminTemplatesPage() {
 
       setStatus({ type: 'uploading', message: 'Guardando en base de datos...' })
 
-      // 2. Insert into manny_templates
-      const template: Omit<SvgTemplate, 'fields'> = {
-        id: formId,
-        name: formName,
-        description: formDescription,
-        category: formCategory,
-        previewImage: '',
-        dimensions: {
-          width: parseInt(formWidth) || 1080,
-          height: parseInt(formHeight) || 1080,
-        },
-        type: 'svg',
-        svgUrl: publicSvgUrl,
-        colorSchemes: DEFAULT_COLOR_SCHEMES,
-      }
-
-      const dbRes = await fetch(`${SUPABASE_URL}/rest/v1/manny_templates`, {
+      // 2. Insert into manny_templates via server API (service role, bypasses RLS)
+      const dbRes = await fetch('/api/admin/save-template', {
         method: 'POST',
-        headers: {
-          apikey: SUPABASE_ANON_KEY,
-          Authorization: `Bearer ${SERVICE_ROLE_KEY || SUPABASE_ANON_KEY}`,
-          'Content-Type': 'application/json',
-          Prefer: 'return=minimal',
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          id: template.id,
-          name: template.name,
-          description: template.description,
-          category: template.category,
-          preview_image: template.previewImage,
-          dimensions: template.dimensions,
-          type: template.type,
-          svg_url: template.svgUrl,
-          color_schemes: template.colorSchemes,
+          id: formId,
+          name: formName,
+          description: formDescription,
+          category: formCategory,
+          preview_image: '',
+          dimensions: {
+            width: parseInt(formWidth) || 1080,
+            height: parseInt(formHeight) || 1080,
+          },
+          type: 'svg',
+          svg_url: publicSvgUrl,
+          color_schemes: DEFAULT_COLOR_SCHEMES,
           active: true,
         }),
       })
 
       if (!dbRes.ok) {
-        const errText = await dbRes.text()
-        throw new Error(`DB insert failed: ${errText}`)
+        const errData = await dbRes.json()
+        throw new Error(`DB insert failed: ${errData.error || dbRes.statusText}`)
       }
 
       setStatus({ type: 'success', message: `Template "${formName}" guardado correctamente.` })
