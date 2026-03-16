@@ -191,3 +191,19 @@ Registro cronológico de bugs, fixes, decisiones técnicas y deploys.
 | 2026-03-14 | `eaabc73` | Fase A — auth + checkout + download gate | ✅ Live |
 | 2026-03-15 | `6e502f5` | Fix admin template save (BUG-005) | ✅ Live |
 | 2026-03-15 | `1cfa2d0` | BUG-006 client SVG preview + BUG-007 pattern image | ✅ Live |
+
+---
+
+### BUG-006b + BUG-007b — LivePreview inline SVG + regex attr-order fix
+**Date:** 2026-03-15
+**Author:** Claudio (direct fix — 1 file, obvious root cause)
+
+**BUG-006b — Preview negro al ingresar texto:**
+Root cause: `encodeURIComponent(bigSvgWithBase64)` genera una data URI de cientos de KB → browser descarta el `<img>` silenciosamente.
+Fix: cambiar de `<img src="data:image/svg+xml,...">` a inline SVG con `dangerouslySetInnerHTML`. El browser renderiza fuentes + imágenes externas nativamente, sin límite de tamaño.
+
+**BUG-007b — Imagen no se actualizaba (regex de atributos):**
+Root cause: regex original asumía `id` ANTES de `fill` en el tag del elemento. Figma exporta `fill="url(#pattern)"` ANTES de `id` → la regex nunca matcheaba → el pattern ID nunca se extraía → imagen no se reemplazaba.
+Fix: buscar el tag con `id="manny-img-*"` primero (cualquier orden), luego extraer `fill="url(#...)"` del tag capturado.
+
+**Archivos modificados:** `src/components/wizard/LivePreview.tsx`

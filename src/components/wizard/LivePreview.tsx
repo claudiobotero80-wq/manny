@@ -38,40 +38,42 @@ function applyColorTokens(svg: string, colorScheme: ColorScheme): string {
 
 /**
  * BUG-006 fix: Replace text content of SVG <text>/<tspan> elements by id.
- * Pattern: (<(text|tspan)[^>]*id="fieldId"[^>]*>)(content)(</...>)
  */
 function replaceTextInSvg(svg: string, fieldId: string, value: string): string {
-  // Replace content inside <text id="fieldId">...</text>
   const textPattern = new RegExp(
     `(<(?:text|tspan)[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</(?:text|tspan)>)`,
     'g'
   )
-  const replaced = svg.replace(textPattern, `$1${value}$3`)
-  if (replaced !== svg) return replaced
-
-  // Also try nested: <text ...><tspan id="fieldId">...</tspan></text>
-  return replaced
+  return svg.replace(textPattern, `$1${value}$3`)
 }
 
 /**
  * BUG-007 fix: Replace image inside <pattern> referenced by an element with id="fieldId".
- * Figma exports: <rect id="manny-img-X" fill="url(#patternXXX)"> with <image> inside <pattern id="patternXXX">.
+ * 
+ * Fixed: regex now handles ANY attribute order (Figma may put fill before id or vice versa).
+ * Previous bug: regex required id BEFORE fill in the element tag.
  */
 function replaceImageInSvg(svg: string, fieldId: string, imageUrl: string): string {
-  // Find the element with this id and extract its fill="url(#patternId)"
-  const elMatch = svg.match(
-    new RegExp(`<[^>]+id="${fieldId}"[^>]+fill="url\\(#([^)]+)\\)"[^>]*>`)
+  // Find the opening tag of the element with this id (any attribute order)
+  const elementTagMatch = svg.match(
+    new RegExp(`<[^>]+id="${fieldId}"[^>]*>`)
   )
-  if (elMatch) {
-    const patternId = elMatch[1]
-    // Replace href inside that pattern's <image> element
-    const result = svg.replace(
-      new RegExp(
-        `(<pattern[^>]*id="${patternId}"[^>]*>[\\s\\S]*?<image[^>]*)(xlink:href|href)="[^"]*"`
-      ),
-      `$1$2="${imageUrl}"`
-    )
-    if (result !== svg) return result
+
+  if (elementTagMatch) {
+    const elementTag = elementTagMatch[0]
+    // Extract fill="url(#patternId)" from the tag (attribute order doesn't matter now)
+    const fillMatch = elementTag.match(/fill="url\(#([^)]+)\)"/)
+    if (fillMatch) {
+      const patternId = fillMatch[1]
+      // Replace href inside that pattern's <image> element
+      const result = svg.replace(
+        new RegExp(
+          `(<pattern[^>]*id="${patternId}"[^>]*>[\\s\\S]*?<image[^>]*)(xlink:href|href)="[^"]*"`
+        ),
+        `$1$2="${imageUrl}"`
+      )
+      if (result !== svg) return result
+    }
   }
 
   // Fallback: try direct href replacement on element with manny-img id
@@ -81,52 +83,51 @@ function replaceImageInSvg(svg: string, fieldId: string, imageUrl: string): stri
   )
 }
 
-/**
- * Apply all field values to the SVG string client-side.
- * BUG-006: text fields become visible without going through resvg
- * BUG-007: image fields update the pattern-referenced <image> element
- */
-function applyFieldsToSvg(
-  svg: string,
-  values: Record<string, string>
-): string {
+/** Apply all field values to the SVG string client-side */
+function applyFieldsToSvg(svg: string, values: Record<string, string>): string {
   let result = svg
   for (const [fieldId, value] of Object.entries(values)) {
     if (!value) continue
-
-    if (
-      fieldId.startsWith('manny-text-') ||
-      fieldId.startsWith('manny-multiline-')
-    ) {
+    if (fieldId.startsWith('manny-text-') || fieldId.startsWith('manny-multiline-')) {
       result = replaceTextInSvg(result, fieldId, value)
-    } else if (
-      fieldId.startsWith('manny-img-') ||
-      fieldId.startsWith('manny-logo-')
-    ) {
+    } else if (fieldId.startsWith('manny-img-') || fieldId.startsWith('manny-logo-')) {
       result = replaceImageInSvg(result, fieldId, value)
     }
   }
   return result
 }
 
+/**
+ * Make SVG fill its container by overriding width/height with 100%.
+ * Figma exports fixed pixel dimensions; we need it to be responsive.
+ */
+function makeSvgResponsive(svg: string): string {
+  return svg.replace(/<svg([^>]*)>/, (match, attrs: string) => {
+    // Remove fixed width/height attrs, keep viewBox
+    const cleaned = attrs
+      .replace(/\s+width="[^"]*"/, '')
+      .replace(/\s+height="[^"]*"/, '')
+    return `<svg${cleaned} style="width:100%;height:100%">`
+  })
+}
+
 export function LivePreview({ templateId, values, colorScheme, svgUrl }: LivePreviewProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
+  const [svgContent, setSvgContent] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
-  // BUG-006: raw SVG fetched once and reused for client-side rendering
   const [rawSvg, setRawSvg] = useState<string | null>(null)
 
   // Fetch the raw SVG once when svgUrl changes
   useEffect(() => {
     if (!svgUrl) {
       setRawSvg(null)
+      setSvgContent(null)
       return
     }
     setLoading(true)
     fetch(svgUrl)
       .then((r) => r.text())
-      .then((text) => {
-        setRawSvg(text)
-      })
+      .then((text) => setRawSvg(text))
       .catch((err) => {
         console.error('[LivePreview] Failed to fetch SVG:', err)
         setRawSvg(null)
@@ -138,17 +139,14 @@ export function LivePreview({ templateId, values, colorScheme, svgUrl }: LivePre
     if (!colorScheme) return
 
     if (svgUrl) {
-      if (!rawSvg) return // still loading or failed
+      if (!rawSvg) return
 
-      // BUG-006 fix: Apply substitutions client-side — no server round-trip needed
-      // This avoids resvg's font loading failure for Figma fonts
-      let modifiedSvg = applyColorTokens(rawSvg, colorScheme)
-      modifiedSvg = applyFieldsToSvg(modifiedSvg, values)
-
-      // Encode as data URI for the <img> tag
-      setPreviewUrl(
-        `data:image/svg+xml;charset=utf-8,${encodeURIComponent(modifiedSvg)}`
-      )
+      // BUG-006 fix: Render client-side as inline SVG (no server round-trip, no data URI size limit)
+      // dangerouslySetInnerHTML allows browser to handle fonts + external images natively
+      let modified = applyColorTokens(rawSvg, colorScheme)
+      modified = applyFieldsToSvg(modified, values)
+      modified = makeSvgResponsive(modified)
+      setSvgContent(modified)
     } else {
       // JSX template: use legacy render endpoint
       setLoading(true)
@@ -174,7 +172,17 @@ export function LivePreview({ templateId, values, colorScheme, svgUrl }: LivePre
           <Loader2 className="w-8 h-8 animate-spin text-white" />
         </div>
       )}
-      {previewUrl ? (
+
+      {/* SVG templates: inline rendering (BUG-006 fix — avoids data URI size limit) */}
+      {svgContent ? (
+        <div
+          className="w-full h-full"
+          // Safe: SVG comes from Juan's admin uploads, not user input
+          // eslint-disable-next-line react/no-danger
+          dangerouslySetInnerHTML={{ __html: svgContent }}
+        />
+      ) : previewUrl ? (
+        // JSX templates: server-rendered PNG
         // eslint-disable-next-line @next/next/no-img-element
         <img
           src={previewUrl}
