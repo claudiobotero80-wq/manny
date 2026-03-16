@@ -42,6 +42,11 @@ function applyColorTokens(svg: string, colorScheme: ColorScheme): string {
  * CRITICAL: closing tag must be </text>, NOT </(?:text|tspan)>.
  * Non-greedy regex would match the first inner </tspan>, producing malformed SVG
  * like <text ...>value</tspan> which the browser silently drops.
+ *
+ * BUG-008 fix: must preserve the first <tspan x y> wrapper.
+ * Replacing the full innerHTML with raw text strips x/y positioning attributes
+ * → text renders at SVG default position (often outside visible area).
+ * Strategy: extract first tspan's x/y, inject value inside it, drop remaining tspans.
  */
 function replaceTextInSvg(svg: string, fieldId: string, value: string): string {
   // Match the full <text id="fieldId"...>...</text> element
@@ -49,7 +54,19 @@ function replaceTextInSvg(svg: string, fieldId: string, value: string): string {
     `(<text[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</text>)`,
     'g'
   )
-  const replaced = svg.replace(textPattern, `$1${value}$3`)
+
+  const replaced = svg.replace(textPattern, (match, open, inner, close) => {
+    // Extract x and y from the first <tspan> inside the text element
+    const tspanMatch = inner.match(/<tspan([^>]*)>/)
+    if (tspanMatch) {
+      const tspanAttrs = tspanMatch[1]
+      // Preserve x and y positioning, inject new value
+      return `${open}<tspan${tspanAttrs}>${value}</tspan>${close}`
+    }
+    // No tspan found — inject value directly (text element has direct content)
+    return `${open}${value}${close}`
+  })
+
   if (replaced !== svg) return replaced
 
   // Fallback: tspan with direct id (less common in Figma exports)

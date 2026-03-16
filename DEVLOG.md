@@ -226,3 +226,58 @@ Fix: detectar `<g id="manny-img-*">`, extraer dimensiones del rect interno, reem
 con `<image href=value clip-path>` + `<clipPath>` para bordes redondeados.
 
 **Archivo modificado:** `src/components/wizard/LivePreview.tsx`
+
+---
+
+## 2026-03-16 — QA Wizard SVG: BUG-008 encontrado
+**Arqui (subagente QA)** — Sesión `a8aaac77`
+
+### QA del wizard SVG completo — template `design-10--3-`
+
+**Flujo testeado:** Imagen upload → Texto → Color picker
+**URL:** https://manny-v2.vercel.app/wizard/design-10--3-
+
+**Resultados:**
+- ✅ BUG-007c confirmado resuelto: image upload reemplaza la imagen en el SVG preview
+- ✅ Color switching (Oscuro/Claro/Cálido): funciona en tiempo real
+- ✅ 0 errores de consola en todo el flujo
+- ✅ Wizard navigation, template loading, catalog
+- ❌ BUG-008 encontrado: texto desaparece del preview al escribir
+
+### BUG-008 — Texto off-screen al reemplazar en SVG preview
+**Causa:** `replaceTextInSvg()` en `LivePreview.tsx` reemplaza el innerHTML completo del `<text>` element incluyendo los `<tspan>` hijos que llevan atributos `x` y `y` de posicionamiento. Sin tspan, el texto renderiza en la posición default del `<text>` que queda fuera del viewport visible (DOM bounding box: x=700, y=18 vs correcto y=778 en SVG coords).
+
+**Estructura Figma real:**
+```xml
+<text id="manny-text-titulo">
+  <tspan x="115" y="778.76">texto default</tspan>
+  <tspan x="115" y="838.76">segunda línea</tspan>
+</text>
+```
+
+**Después del fix actual (ROTO):**
+```xml
+<text id="manny-text-titulo">nuevo texto</text>
+← tspanCount=0, posición off-screen
+```
+
+**Fix necesario en:** `src/components/wizard/LivePreview.tsx` → `replaceTextInSvg()`
+**Estrategia:** Preservar el primer `<tspan>` con sus atributos `x`,`y`. Reemplazar solo el text content dentro del tspan. Eliminar tspans adicionales.
+**Afecta:** Todos los campos `manny-text-*` en todos los templates SVG.
+**Estimación:** 15 min, 1 función, 1 archivo.
+
+---
+
+### BUG-008 — Texto fuera del área visible en SVG preview (16/03)
+**Detectado por:** Arqui (QA post-commit 4bbb12d)
+**Fixed by:** Claudio (directo — misma función, causa obvia)
+
+Root cause: BUG-006c fix reemplazaba el innerHTML completo del `<text>` con texto plano,
+perdiendo los `<tspan x="..." y="...">` hijos que llevan el posicionamiento.
+Sin tspan, el texto se renderiza en las coordenadas default del elemento `<text>`,
+que en este template son (700, 18) — fuera del área visible del preview.
+
+Fix: dentro del replace, extraer los atributos del primer `<tspan>` (x, y, etc.),
+envolver el nuevo valor en `<tspan [attrs]>value</tspan>`, descartar tspans restantes.
+
+**Archivo:** `src/components/wizard/LivePreview.tsx` — función `replaceTextInSvg`
