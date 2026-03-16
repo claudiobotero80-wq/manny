@@ -158,13 +158,22 @@ export function WizardLayout() {
         <div className="w-full md:w-1/2 lg:w-2/5 flex flex-col border-r border-zinc-200 dark:border-zinc-800">
           {/* Header */}
           <div className="p-6 border-b border-zinc-200 dark:border-zinc-800">
-            <button
-              onClick={() => router.push('/catalog')}
-              className="text-sm text-zinc-500 hover:text-zinc-700 flex items-center gap-1 mb-4"
-            >
-              <ChevronLeft className="w-4 h-4" />
-              Volver al catálogo
-            </button>
+            <div className="flex items-center justify-between mb-4">
+              <button
+                onClick={() => router.push('/catalog')}
+                className="text-sm text-zinc-500 hover:text-zinc-700 flex items-center gap-1"
+              >
+                <ChevronLeft className="w-4 h-4" />
+                Volver al catálogo
+              </button>
+              <button
+                onClick={() => router.push('/')}
+                className="text-sm text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 flex items-center gap-1 transition-colors"
+              >
+                <ChevronLeft className="w-3.5 h-3.5" />
+                Cambiar template
+              </button>
+            </div>
             <h1 className="text-xl font-bold text-zinc-900 dark:text-white">{template.name}</h1>
             <p className="text-sm text-zinc-500 mt-1">{template.description}</p>
             {isSvg && (

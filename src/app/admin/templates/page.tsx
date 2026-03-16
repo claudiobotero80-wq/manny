@@ -1,9 +1,9 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Loader2, Upload, CheckCircle, AlertCircle } from 'lucide-react'
+import { Loader2, Upload, CheckCircle, AlertCircle, Trash2 } from 'lucide-react'
 import { parseSvgFields } from '@/lib/svg/parser'
 import { renderSvg } from '@/lib/svg/renderer'
 import { ColorScheme, SvgTemplate } from '@/types'
@@ -52,6 +52,15 @@ interface UploadStatus {
   message?: string
 }
 
+interface TemplateRecord {
+  id: string
+  name: string
+  description?: string
+  category?: string
+  svg_url?: string
+  active?: boolean
+}
+
 export default function AdminTemplatesPage() {
   const fileRef = useRef<HTMLInputElement>(null)
   const [svgContent, setSvgContent] = useState<string>('')
@@ -68,6 +77,66 @@ export default function AdminTemplatesPage() {
 
   const [detectedFields, setDetectedFields] = useState<ReturnType<typeof parseSvgFields>>([])
   const [status, setStatus] = useState<UploadStatus>({ type: 'idle' })
+
+  // Existing templates list
+  const [templates, setTemplates] = useState<TemplateRecord[]>([])
+  const [loadingTemplates, setLoadingTemplates] = useState(true)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetchTemplates()
+  }, [])
+
+  async function fetchTemplates() {
+    setLoadingTemplates(true)
+    try {
+      const res = await fetch(
+        `${SUPABASE_URL}/rest/v1/manny_templates?select=id,name,description,category,svg_url,active&order=name.asc`,
+        {
+          headers: {
+            apikey: SUPABASE_ANON_KEY,
+            Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
+          },
+        }
+      )
+      if (res.ok) {
+        const data = await res.json()
+        setTemplates(data)
+      }
+    } catch (err) {
+      console.error('Error fetching templates:', err)
+    } finally {
+      setLoadingTemplates(false)
+    }
+  }
+
+  async function handleDelete(templateId: string, templateName: string) {
+    if (!window.confirm(`¿Eliminar el template "${templateName}"? Esta acción no se puede deshacer.`)) {
+      return
+    }
+
+    setDeletingId(templateId)
+    try {
+      const res = await fetch('/api/admin/delete-template', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ templateId }),
+      })
+
+      if (!res.ok) {
+        const errData = await res.json()
+        alert(`Error al eliminar: ${errData.error || res.statusText}`)
+        return
+      }
+
+      // Remove from local state without reloading
+      setTemplates((prev) => prev.filter((t) => t.id !== templateId))
+    } catch (err) {
+      alert(`Error al eliminar: ${String(err)}`)
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -132,6 +201,8 @@ export default function AdminTemplatesPage() {
       }
 
       setStatus({ type: 'success', message: `Template "${formName}" guardado correctamente.` })
+      // Refresh the templates list
+      fetchTemplates()
     } catch (err) {
       setStatus({ type: 'error', message: String(err) })
     }
@@ -141,12 +212,66 @@ export default function AdminTemplatesPage() {
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950 p-8">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold text-zinc-900 dark:text-white mb-2">
-          Admin — Subir Template SVG
+          Admin — Templates SVG
         </h1>
         <p className="text-zinc-500 mb-8">
           Subí un SVG exportado de Figma con convención de nombres{' '}
           <code className="bg-zinc-200 dark:bg-zinc-800 px-1 rounded text-sm">manny-*</code>
         </p>
+
+        {/* Existing templates */}
+        <div className="mb-10">
+          <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 mb-4">
+            Templates existentes
+          </h2>
+          {loadingTemplates ? (
+            <div className="flex items-center gap-2 text-zinc-500 text-sm">
+              <Loader2 className="w-4 h-4 animate-spin" />
+              Cargando templates...
+            </div>
+          ) : templates.length === 0 ? (
+            <p className="text-zinc-400 text-sm">No hay templates cargados todavía.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {templates.map((t) => (
+                <div
+                  key={t.id}
+                  className="flex items-start justify-between gap-3 p-4 bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-xl"
+                >
+                  <div className="min-w-0">
+                    <p className="font-medium text-sm text-zinc-900 dark:text-white truncate">{t.name}</p>
+                    <p className="text-xs text-zinc-400 font-mono truncate mt-0.5">{t.id}</p>
+                    {t.category && (
+                      <span className="inline-block mt-1 px-2 py-0.5 text-xs bg-zinc-100 dark:bg-zinc-800 text-zinc-500 rounded-full">
+                        {t.category}
+                      </span>
+                    )}
+                  </div>
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() => handleDelete(t.id, t.name)}
+                    disabled={deletingId === t.id}
+                    className="shrink-0"
+                  >
+                    {deletingId === t.id ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Trash2 className="w-4 h-4" />
+                    )}
+                    <span className="ml-1.5">Eliminar</span>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <hr className="border-zinc-200 dark:border-zinc-800 mb-10" />
+
+        <h2 className="text-lg font-semibold text-zinc-800 dark:text-zinc-200 mb-6">
+          Subir nuevo template
+        </h2>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           {/* Form */}
