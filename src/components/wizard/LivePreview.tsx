@@ -51,39 +51,100 @@ function applyColorTokens(svg: string, colorScheme: ColorScheme): string {
 }
 
 /**
- * BUG-006 fix (v2): Replace text content of SVG <text> elements by id.
- *
- * CRITICAL: closing tag must be </text>, NOT </(?:text|tspan)>.
- * Non-greedy regex would match the first inner </tspan>, producing malformed SVG
- * like <text ...>value</tspan> which the browser silently drops.
- *
- * BUG-008 fix: must preserve the first <tspan x y> wrapper.
- * Replacing the full innerHTML with raw text strips x/y positioning attributes
- * → text renders at SVG default position (often outside visible area).
- * Strategy: extract first tspan's x/y, inject value inside it, drop remaining tspans.
+ * Auto-wrap text into SVG tspan elements using canvas text measurement.
+ * Uses the original SVG tspans to infer: x position, startY, lineHeight, fontSize, fontFamily.
+ * Uses the original tspan content widths to infer maxWidth (the column width the designer intended).
+ * Returns a string of <tspan> elements ready to be inserted inside a <text> element.
+ */
+function autoWrapTextToTspans(
+  value: string,
+  originalInner: string,
+  openTag: string
+): string {
+  // Extract all original tspans
+  const tspanMatches = [...originalInner.matchAll(/<tspan([^>]*)>([^<]*)<\/tspan>/g)]
+  if (!tspanMatches.length) return value
+
+  // x, startY from first tspan
+  const firstAttrs = tspanMatches[0][1]
+  const xStr = firstAttrs.match(/\bx="([^"]+)"/)?.[1] ?? '0'
+  const yStr = firstAttrs.match(/\by="([^"]+)"/)?.[1] ?? '0'
+  const x = parseFloat(xStr)
+  const startY = parseFloat(yStr)
+
+  // lineHeight = y delta between first two tspans (default: fontSize * 1.2)
+  const fontSizeStr = openTag.match(/font-size="([^"]+)"/)?.[1] ?? '16'
+  const fontSize = parseFloat(fontSizeStr)
+  let lineHeight = fontSize * 1.25
+  if (tspanMatches.length > 1) {
+    const y2Str = tspanMatches[1][1].match(/\by="([^"]+)"/)?.[1]
+    if (y2Str) lineHeight = parseFloat(y2Str) - startY
+  }
+
+  // fontFamily from <text> tag
+  const fontFamily = openTag.match(/font-family="([^"]+)"/)?.[1] ?? 'sans-serif'
+
+  // maxWidth: measure longest original tspan content with canvas
+  let maxWidth = fontSize * 20 // safe fallback
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.font = `${fontSize}px ${fontFamily}`
+      const widths = tspanMatches.map((m) => ctx.measureText(m[2].trim()).width)
+      maxWidth = Math.max(...widths, fontSize * 10)
+    }
+  }
+
+  // Word-wrap user text into lines
+  const words = value.split(' ').filter((w) => w.length > 0)
+  const lines: string[] = []
+  let current = ''
+
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')
+    if (ctx) {
+      ctx.font = `${fontSize}px ${fontFamily}`
+      for (const word of words) {
+        const test = current ? `${current} ${word}` : word
+        if (ctx.measureText(test).width > maxWidth && current) {
+          lines.push(current)
+          current = word
+        } else {
+          current = test
+        }
+      }
+    }
+  }
+  if (current) lines.push(current)
+  if (!lines.length) lines.push(value)
+
+  // Generate tspan elements
+  return lines
+    .map((line, i) => `<tspan x="${xStr}" y="${startY + i * lineHeight}">${line}</tspan>`)
+    .join('\n')
+}
+
+/**
+ * Replace text content of SVG <text> elements by id, with auto word-wrap.
+ * Uses canvas.measureText() to distribute user text across tspan lines
+ * matching the column width from the original SVG design.
  */
 function replaceTextInSvg(svg: string, fieldId: string, value: string): string {
-  // Match the full <text id="fieldId"...>...</text> element
   const textPattern = new RegExp(
     `(<text[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</text>)`,
     'g'
   )
 
   const replaced = svg.replace(textPattern, (match, open, inner, close) => {
-    // Extract x and y from the first <tspan> inside the text element
-    const tspanMatch = inner.match(/<tspan([^>]*)>/)
-    if (tspanMatch) {
-      const tspanAttrs = tspanMatch[1]
-      // Preserve x and y positioning, inject new value
-      return `${open}<tspan${tspanAttrs}>${value}</tspan>${close}`
-    }
-    // No tspan found — inject value directly (text element has direct content)
-    return `${open}${value}${close}`
+    const wrappedTspans = autoWrapTextToTspans(value, inner, open)
+    return `${open}${wrappedTspans}${close}`
   })
 
   if (replaced !== svg) return replaced
 
-  // Fallback: tspan with direct id (less common in Figma exports)
+  // Fallback: tspan with direct id
   const tspanPattern = new RegExp(
     `(<tspan[^>]*id="${fieldId}"[^>]*>)([^<]*)(</tspan>)`,
     'g'
