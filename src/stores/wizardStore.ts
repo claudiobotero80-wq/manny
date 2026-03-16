@@ -56,8 +56,12 @@ export const useWizardStore = create<WizardStore>((set, get) => ({
   nextStep: () =>
     set((state) => {
       const fields = get().getActiveFields()
+      const nonColorCount = fields.filter((f) => f.type !== 'color').length
+      const hasColorFields = fields.some((f) => f.type === 'color')
+      // totalSteps in the layout = nonColorCount + (hasColorFields ? 1 : 0)
+      const totalSteps = nonColorCount + (hasColorFields ? 1 : 0)
       return {
-        currentStep: Math.min(state.currentStep + 1, fields.length),
+        currentStep: Math.min(state.currentStep + 1, totalSteps - 1),
       }
     }),
 

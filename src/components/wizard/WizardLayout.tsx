@@ -37,12 +37,20 @@ export function WizardLayout() {
   if (!template) return null
 
   const activeFields = getActiveFields()
-  const field = activeFields[currentStep]
-  const totalSteps = activeFields.length
-  const progress = totalSteps > 0 ? ((currentStep + 1) / (totalSteps + 1)) * 100 : 0
-
   const isSvg = isSvgTemplate()
   const svgUrl = isSvg ? (template as SvgTemplate).svgUrl : undefined
+
+  // Split fields into non-color and color groups
+  const nonColorFields = activeFields.filter((f) => f.type !== 'color')
+  const colorFields = activeFields.filter((f) => f.type === 'color')
+  const hasColorFields = colorFields.length > 0
+
+  // Total steps: one per non-color field + 1 unified color step (if any color fields)
+  const totalSteps = nonColorFields.length + (hasColorFields ? 1 : 0)
+  const isUnifiedColorStep = hasColorFields && currentStep === nonColorFields.length
+
+  const field = isUnifiedColorStep ? null : nonColorFields[currentStep]
+  const progress = totalSteps > 0 ? ((currentStep + 1) / totalSteps) * 100 : 0
 
   function saveIntent() {
     if (typeof window !== 'undefined') {
@@ -131,10 +139,10 @@ export function WizardLayout() {
   }
 
   const isLastStep = currentStep === totalSteps - 1
-  // SVG templates use manny-color-* fields inline — skip the old colorScheme picker step
+  // Legacy JSX color scheme picker (non-SVG templates with colorSchemes)
   const hasColorSchemes = (template.colorSchemes?.length ?? 0) > 0
-  const isColorStep = !isSvg && currentStep >= totalSteps
-  // SVG templates: finalizar button appears on last step
+  const isColorStep = !isSvg && currentStep >= nonColorFields.length && !hasColorFields
+  // SVG templates: finalizar button on last step (whether that's a color step or a field step)
   const isSvgLastStep = isSvg && isLastStep && totalSteps > 0
 
   // Loading state for SVG dynamic fields
@@ -196,6 +204,7 @@ export function WizardLayout() {
           {/* Step content */}
           <div className="flex-1 overflow-y-auto p-6">
             {isColorStep ? (
+              // Legacy JSX template color scheme picker
               <div className="space-y-6">
                 <div>
                   <h2 className="text-lg font-semibold mb-1">Elegí los colores</h2>
@@ -206,6 +215,33 @@ export function WizardLayout() {
                   selected={colorScheme}
                   onSelect={setColorScheme}
                 />
+              </div>
+            ) : isUnifiedColorStep ? (
+              // Unified color step: all manny-color-* fields in one screen
+              <div className="space-y-6">
+                <div>
+                  <h2 className="text-lg font-semibold mb-1">Elegí los colores</h2>
+                  <p className="text-sm text-zinc-500">Personalizá los colores de tu diseño</p>
+                </div>
+                <div className="space-y-5">
+                  {colorFields.map((cf) => {
+                    const currentValue = values[cf.id] || (cf.config as import('@/types').ColorFieldConfig).defaultValue || '#000000'
+                    return (
+                      <div key={cf.id} className="flex items-center gap-4">
+                        <input
+                          type="color"
+                          value={currentValue}
+                          onChange={(e) => setValue(cf.id, e.target.value)}
+                          className="w-14 h-14 rounded-lg cursor-pointer border border-zinc-200 dark:border-zinc-700 p-1 bg-white dark:bg-zinc-800 flex-shrink-0"
+                        />
+                        <div>
+                          <p className="text-sm font-medium text-zinc-900 dark:text-white">{cf.label}</p>
+                          <p className="text-xs text-zinc-500 font-mono mt-0.5">{currentValue}</p>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
               </div>
             ) : field ? (
               <div className="space-y-6">
@@ -234,15 +270,15 @@ export function WizardLayout() {
             <Button
               variant="outline"
               onClick={prevStep}
-              disabled={currentStep === 0 && !isColorStep}
+              disabled={currentStep === 0 && !isColorStep && !isUnifiedColorStep}
             >
               <ChevronLeft className="w-4 h-4 mr-1" />
               Anterior
             </Button>
 
             <div className="flex gap-2">
-              {/* Color step: show Finalizar (→ checkout) */}
-              {isColorStep && (
+              {/* Unified color step OR legacy color step OR SVG last step: show Finalizar */}
+              {(isColorStep || isUnifiedColorStep || isSvgLastStep) && (
                 <Button
                   onClick={handleFinalizar}
                   disabled={finalizando}
@@ -257,27 +293,12 @@ export function WizardLayout() {
                 </Button>
               )}
 
-              {isSvgLastStep && (
+              {!isColorStep && !isUnifiedColorStep && !isSvgLastStep && (
                 <Button
-                  onClick={handleFinalizar}
-                  disabled={finalizando}
-                  className="bg-[#CCFF90] text-zinc-900 hover:bg-[#b8f070] font-bold"
-                >
-                  {finalizando ? (
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  ) : (
-                    <ShoppingCart className="w-4 h-4 mr-2" />
-                  )}
-                  Finalizar
-                </Button>
-              )}
-
-              {!isColorStep && !isSvgLastStep && (
-                <Button
-                  onClick={isLastStep && hasColorSchemes ? () => useWizardStore.getState().nextStep() : nextStep}
+                  onClick={isLastStep && hasColorSchemes && !hasColorFields ? () => useWizardStore.getState().nextStep() : nextStep}
                   disabled={field?.required && !values[field?.id]?.trim()}
                 >
-                  {isLastStep && hasColorSchemes ? 'Elegir colores' : 'Siguiente'}
+                  {isLastStep && hasColorSchemes && !hasColorFields ? 'Elegir colores' : 'Siguiente'}
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               )}
