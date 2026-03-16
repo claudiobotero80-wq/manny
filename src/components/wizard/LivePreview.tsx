@@ -12,26 +12,40 @@ interface LivePreviewProps {
   svgUrl?: string
 }
 
-/** Color tokens used by Figma → map to colorScheme properties */
-const COLOR_TOKEN_MAP: Record<string, keyof ColorScheme> = {
-  '#FF0099': 'primary',
-  '#ff0099': 'primary',
-  '#00FF99': 'secondary',
-  '#00ff99': 'secondary',
-  '#FFFF00': 'background',
-  '#ffff00': 'background',
-  '#FF6600': 'text',
-  '#ff6600': 'text',
+/**
+ * Replace all fill/stroke colors inside a <g id="manny-color-[id]"> group.
+ * Skips fill="none" and fill="url(...)" (patterns/gradients).
+ */
+function replaceColorInSvg(svg: string, fieldId: string, colorValue: string): string {
+  const groupMatch = svg.match(
+    new RegExp(`(<g[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</g>)`)
+  )
+  if (!groupMatch) return svg
+
+  const [fullMatch, open, inner, close] = groupMatch
+  const updatedInner = inner
+    .replace(/fill="([^"]+)"/g, (m, val) =>
+      val === 'none' || val.startsWith('url(') ? m : `fill="${colorValue}"`
+    )
+    .replace(/stroke="([^"]+)"/g, (m, val) =>
+      val === 'none' || val.startsWith('url(') ? m : `stroke="${colorValue}"`
+    )
+  return svg.replace(fullMatch, `${open}${updatedInner}${close}`)
 }
 
-/** Apply color token replacements to SVG string */
+/** Apply color token replacements to SVG string (JSX templates with colorScheme) */
 function applyColorTokens(svg: string, colorScheme: ColorScheme): string {
+  // Only used for JSX templates — SVG templates use manny-color-* groups instead
+  const COLOR_TOKEN_MAP: Record<string, keyof ColorScheme> = {
+    '#FF0099': 'primary', '#ff0099': 'primary',
+    '#00FF99': 'secondary', '#00ff99': 'secondary',
+    '#FFFF00': 'background', '#ffff00': 'background',
+    '#FF6600': 'text', '#ff6600': 'text',
+  }
   let result = svg
   for (const [token, key] of Object.entries(COLOR_TOKEN_MAP)) {
     const colorValue = colorScheme[key] as string
-    if (colorValue) {
-      result = result.split(token).join(colorValue)
-    }
+    if (colorValue) result = result.split(token).join(colorValue)
   }
   return result
 }
@@ -167,6 +181,8 @@ function applyFieldsToSvg(svg: string, values: Record<string, string>): string {
       result = replaceTextInSvg(result, fieldId, value)
     } else if (fieldId.startsWith('manny-img-') || fieldId.startsWith('manny-logo-')) {
       result = replaceImageInSvg(result, fieldId, value)
+    } else if (fieldId.startsWith('manny-color-')) {
+      result = replaceColorInSvg(result, fieldId, value)
     }
   }
   return result

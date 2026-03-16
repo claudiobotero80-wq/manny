@@ -311,3 +311,19 @@ Fix: dentro del replace, extraer los atributos del primer `<tspan>` (x, y, etc.)
 envolver el nuevo valor en `<tspan [attrs]>value</tspan>`, descartar tspans restantes.
 
 **Archivo:** `src/components/wizard/LivePreview.tsx` — función `replaceTextInSvg`
+
+---
+
+### Feature: sistema de colores dinámicos manny-color-* (16/03)
+**Author:** Claudio (directo — Arqui subagent fallaba en <20s sin hacer nada)
+
+**Cambio:** Reemplaza el sistema de "themes" (Oscuro/Claro/Cálido) por color pickers individuales basados en grupos Figma `manny-color-[id]`.
+
+**Archivos modificados:**
+- `src/lib/svg/parser.ts` — detecta `manny-color-*` grupos, extrae color default del primer fill válido
+- `src/components/wizard/WizardStep.tsx` — agrega case `type: 'color'` → `<input type="color">` con valor default del SVG
+- `src/components/wizard/LivePreview.tsx` — agrega `replaceColorInSvg()`, se llama en `applyFieldsToSvg()` para campos `manny-color-*`; `applyColorTokens` queda solo para JSX templates con colorSchemes
+- `src/components/wizard/WizardLayout.tsx` — SVG templates saltan el step de ColorPicker; "Finalizar" aparece en el último step directamente
+
+**Backward-compatible:** si el SVG no tiene `manny-color-*`, no aparecen pickers.
+**promo-restaurante (JSX):** sin cambios, sigue usando colorSchemes.

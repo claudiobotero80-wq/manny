@@ -131,7 +131,11 @@ export function WizardLayout() {
   }
 
   const isLastStep = currentStep === totalSteps - 1
-  const isColorStep = currentStep >= totalSteps
+  // SVG templates use manny-color-* fields inline — skip the old colorScheme picker step
+  const hasColorSchemes = (template.colorSchemes?.length ?? 0) > 0
+  const isColorStep = !isSvg && currentStep >= totalSteps
+  // SVG templates: finalizar button appears on last step
+  const isSvgLastStep = isSvg && isLastStep && totalSteps > 0
 
   // Loading state for SVG dynamic fields
   if (isSvg && dynamicFieldsLoading) {
@@ -253,12 +257,27 @@ export function WizardLayout() {
                 </Button>
               )}
 
-              {!isColorStep && (
+              {isSvgLastStep && (
                 <Button
-                  onClick={isLastStep ? () => useWizardStore.getState().nextStep() : nextStep}
+                  onClick={handleFinalizar}
+                  disabled={finalizando}
+                  className="bg-[#CCFF90] text-zinc-900 hover:bg-[#b8f070] font-bold"
+                >
+                  {finalizando ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <ShoppingCart className="w-4 h-4 mr-2" />
+                  )}
+                  Finalizar
+                </Button>
+              )}
+
+              {!isColorStep && !isSvgLastStep && (
+                <Button
+                  onClick={isLastStep && hasColorSchemes ? () => useWizardStore.getState().nextStep() : nextStep}
                   disabled={field?.required && !values[field?.id]?.trim()}
                 >
-                  {isLastStep ? 'Elegir colores' : 'Siguiente'}
+                  {isLastStep && hasColorSchemes ? 'Elegir colores' : 'Siguiente'}
                   <ChevronRight className="w-4 h-4 ml-1" />
                 </Button>
               )}

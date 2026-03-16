@@ -11,15 +11,20 @@ export interface ImageFieldConfig {
   generatePromptBase: string
 }
 
+export interface ColorFieldConfig {
+  defaultValue: string // hex color from original SVG
+}
+
 export interface TemplateField {
   id: string
-  type: 'text' | 'image' | 'logo'
+  type: 'text' | 'image' | 'logo' | 'color'
   label: string
   placeholder?: string
   helpText?: string
   required: boolean
-  config: TextFieldConfig | ImageFieldConfig
+  config: TextFieldConfig | ImageFieldConfig | ColorFieldConfig
   aiPrompt?: string
+  defaultValue?: string // used by color fields
 }
 
 export interface ColorScheme {
