@@ -213,6 +213,32 @@ Registro cronológico de bugs, fixes, decisiones técnicas y deploys.
 
 ---
 
+## 2026-03-16 — Feature: Color step unificado en el wizard
+**Arqui** — Sesión `45046c82`
+
+### Feature: Unified Color Step
+Antes: cada campo `manny-color-*` era un step separado en el wizard.
+Ahora: todos los color fields se agrupan en UN SOLO paso final.
+
+**Lógica implementada:**
+- `nonColorFields = activeFields.filter(f => f.type !== 'color')`
+- `colorFields = activeFields.filter(f => f.type === 'color')`
+- `totalSteps = nonColorFields.length + (colorFields.length > 0 ? 1 : 0)`
+- `isUnifiedColorStep`: true cuando `currentStep === nonColorFields.length` y hay color fields
+- El step unificado renderiza todos los color pickers en una sola pantalla (label + input type color)
+- Finalizar aparece correctamente en el último step real (unified color step o último field step si no hay colores)
+- Backward-compatible: JSX templates con `colorSchemes` siguen usando el picker legacy de paletas
+- `wizardStore.ts`: `nextStep()` cap actualizado para respetar la nueva lógica de totalSteps
+
+**Archivos modificados:**
+- `src/components/wizard/WizardLayout.tsx`
+- `src/stores/wizardStore.ts`
+
+**Build:** ✅ Sin errores TypeScript ni warnings
+**Commit:** `79843a3`
+
+---
+
 ## Estado actual de deploys
 
 | Fecha | Commit | Descripción | Estado |

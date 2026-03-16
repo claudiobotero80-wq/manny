@@ -75,11 +75,11 @@ export function WizardLayout() {
         const res = await fetch(endpoint, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            templateId: template!.id,
-            fields: values,
-            colorScheme,
-          }),
+          body: JSON.stringify(
+            isSvgTemplate
+              ? { svgUrl: (template as SvgTemplate).svgUrl, values, colorScheme }
+              : { templateId: template!.id, fields: values, colorScheme }
+          ),
         })
         if (!res.ok) throw new Error('Render failed')
         const blob = await res.blob()
