@@ -109,10 +109,16 @@ Ejemplo incorrecto (1 solo tspan → sin delta, usa fallback):
 **Cuándo usarlo:** cuando querés que el usuario pueda cambiar el color de ciertos elementos (fondo, acento, textos decorativos, bordes, íconos).
 
 **Cómo configurarlo en Figma:**
-1. Seleccioná todos los elementos que van a compartir ese color (ej: todos los elementos naranjas)
+
+Si es un **único elemento** (ej: un rect de fondo): renombrá la capa directamente:
+- `manny-color-fondo` → el fill de ese rect se vuelve dinámico
+
+Si son **múltiples elementos que comparten el mismo color** (ej: todos los naranjas):
+1. Seleccioná todos los elementos
 2. Agrupalos: Cmd+G
 3. Renombrá el grupo como `manny-color-acento`
-4. Repetí para cada color dinámico que tengas: `manny-color-fondo`, `manny-color-texto`, etc.
+
+Repetí para cada color dinámico: `manny-color-fondo`, `manny-color-texto`, `manny-color-acento`, etc.
 
 **Cómo funciona:** Manny extrae el color original de esa capa (del primer elemento con fill dentro del grupo) y lo muestra como default en el picker. Cuando el usuario elige un nuevo color, se aplica a todos los elementos dentro del grupo.
 
