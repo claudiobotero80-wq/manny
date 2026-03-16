@@ -207,3 +207,22 @@ Root cause: regex original asumía `id` ANTES de `fill` en el tag del elemento. 
 Fix: buscar el tag con `id="manny-img-*"` primero (cualquier orden), luego extraer `fill="url(#...)"` del tag capturado.
 
 **Archivos modificados:** `src/components/wizard/LivePreview.tsx`
+
+---
+
+### BUG-006c + BUG-007c — Root cause identified and fixed (16/03)
+**Author:** Claudio (direct fix — 1 file, root causes confirmed by inspecting actual SVG)
+
+**BUG-006c - Texto no aparece:**
+Root cause: regex usaba `</(?:text|tspan)>` como cierre. Con non-greedy match, capturaba el PRIMER
+`</tspan>` interno y producía SVG inválido: `<text ...>value</tspan>`. Browser lo descartaba silenciosamente.
+Fix: cambiar closing tag a `</text>` específicamente.
+
+**BUG-007c - Imagen no se actualiza:**
+Root cause: `manny-img-foto` es un `<g>` group. Estructura real Figma:
+`<g id="manny-img-foto">` → `<rect fill="url(#pattern0_4_2)">` → `<pattern>` → `<use xlink:href="#image0_4_2">` → `<image id="image0_4_2">`
+El código anterior buscaba fill="url(#...)" en el elemento con el ID, pero el `<g>` no tiene fill.
+Fix: detectar `<g id="manny-img-*">`, extraer dimensiones del rect interno, reemplazar todo el grupo
+con `<image href=value clip-path>` + `<clipPath>` para bordes redondeados.
+
+**Archivo modificado:** `src/components/wizard/LivePreview.tsx`

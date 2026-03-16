@@ -37,46 +37,104 @@ function applyColorTokens(svg: string, colorScheme: ColorScheme): string {
 }
 
 /**
- * BUG-006 fix: Replace text content of SVG <text>/<tspan> elements by id.
+ * BUG-006 fix (v2): Replace text content of SVG <text> elements by id.
+ *
+ * CRITICAL: closing tag must be </text>, NOT </(?:text|tspan)>.
+ * Non-greedy regex would match the first inner </tspan>, producing malformed SVG
+ * like <text ...>value</tspan> which the browser silently drops.
  */
 function replaceTextInSvg(svg: string, fieldId: string, value: string): string {
+  // Match the full <text id="fieldId"...>...</text> element
   const textPattern = new RegExp(
-    `(<(?:text|tspan)[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</(?:text|tspan)>)`,
+    `(<text[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</text>)`,
     'g'
   )
-  return svg.replace(textPattern, `$1${value}$3`)
+  const replaced = svg.replace(textPattern, `$1${value}$3`)
+  if (replaced !== svg) return replaced
+
+  // Fallback: tspan with direct id (less common in Figma exports)
+  const tspanPattern = new RegExp(
+    `(<tspan[^>]*id="${fieldId}"[^>]*>)([^<]*)(</tspan>)`,
+    'g'
+  )
+  return svg.replace(tspanPattern, `$1${value}$3`)
 }
 
 /**
- * BUG-007 fix: Replace image inside <pattern> referenced by an element with id="fieldId".
- * 
- * Fixed: regex now handles ANY attribute order (Figma may put fill before id or vice versa).
- * Previous bug: regex required id BEFORE fill in the element tag.
+ * BUG-007 fix (v2): Replace image for a field that may be a <g> group (Figma export).
+ *
+ * Figma exports image layers as:
+ *   <g id="manny-img-foto">
+ *     <rect x y w h rx fill="#D9D9D9"/>          ← gray placeholder
+ *     <rect x y w h rx fill="url(#patternId)"/>  ← actual image via pattern
+ *   </g>
+ * Pattern chain: <pattern id="patternId"> → <use xlink:href="#imageId"> → <image id="imageId" href="data:..."/>
+ *
+ * Strategy: extract rect dimensions from the group, then inject a clean <image>+<clipPath>.
+ * Also handles plain <rect id="manny-img-*" fill="url(#...)"> and <image id="manny-img-*"> elements.
  */
 function replaceImageInSvg(svg: string, fieldId: string, imageUrl: string): string {
-  // Find the opening tag of the element with this id (any attribute order)
-  const elementTagMatch = svg.match(
-    new RegExp(`<[^>]+id="${fieldId}"[^>]*>`)
+  // --- Case 1: <g id="manny-img-*"> group (Figma standard export) ---
+  const groupMatch = svg.match(
+    new RegExp(`<g id="${fieldId}"[^>]*>([\\s\\S]*?)</g>`)
   )
-
-  if (elementTagMatch) {
-    const elementTag = elementTagMatch[0]
-    // Extract fill="url(#patternId)" from the tag (attribute order doesn't matter now)
-    const fillMatch = elementTag.match(/fill="url\(#([^)]+)\)"/)
-    if (fillMatch) {
-      const patternId = fillMatch[1]
-      // Replace href inside that pattern's <image> element
-      const result = svg.replace(
-        new RegExp(
-          `(<pattern[^>]*id="${patternId}"[^>]*>[\\s\\S]*?<image[^>]*)(xlink:href|href)="[^"]*"`
-        ),
-        `$1$2="${imageUrl}"`
-      )
-      if (result !== svg) return result
+  if (groupMatch) {
+    const groupContent = groupMatch[1]
+    // Extract dimensions from the first <rect> inside the group
+    const rectMatch = groupContent.match(
+      /<rect\s+([^/]*?)\/?>/ // first rect tag in the group
+    )
+    if (rectMatch) {
+      const rectAttrs = rectMatch[1]
+      const x = rectAttrs.match(/\bx="([^"]*)"/)
+      const y = rectAttrs.match(/\by="([^"]*)"/)
+      const w = rectAttrs.match(/\bwidth="([^"]*)"/)
+      const h = rectAttrs.match(/\bheight="([^"]*)"/)
+      const rx = rectAttrs.match(/\brx="([^"]*)"/)
+      if (x && y && w && h) {
+        const clipId = `clip-${fieldId}`
+        const newGroup = `<g id="${fieldId}">
+<clipPath id="${clipId}"><rect x="${x[1]}" y="${y[1]}" width="${w[1]}" height="${h[1]}"${rx ? ` rx="${rx[1]}"` : ''}/></clipPath>
+<image href="${imageUrl}" x="${x[1]}" y="${y[1]}" width="${w[1]}" height="${h[1]}" clip-path="url(#${clipId})" preserveAspectRatio="xMidYMid slice"/>
+</g>`
+        return svg.replace(groupMatch[0], newGroup)
+      }
     }
   }
 
-  // Fallback: try direct href replacement on element with manny-img id
+  // --- Case 2: <rect id="manny-img-*" fill="url(#patternId)"> ---
+  const rectTagMatch = svg.match(
+    new RegExp(`<[^>]+id="${fieldId}"[^>]*>`)
+  )
+  if (rectTagMatch) {
+    const elementTag = rectTagMatch[0]
+    const fillMatch = elementTag.match(/fill="url\(#([^)]+)\)"/)
+    if (fillMatch) {
+      const patternId = fillMatch[1]
+      // Find the image ID referenced via <use xlink:href="#imageId"> inside the pattern
+      const patternMatch = svg.match(
+        new RegExp(`<pattern[^>]*id="${patternId}"[^>]*>([\\s\\S]*?)</pattern>`)
+      )
+      if (patternMatch) {
+        const useMatch = patternMatch[1].match(/xlink:href="#([^"]+)"/)
+        if (useMatch) {
+          const imageId = useMatch[1]
+          // Update the actual <image> element's href
+          return svg.replace(
+            new RegExp(`(<image[^>]*id="${imageId}"[^>]*)(xlink:href|href)="[^"]*"`),
+            `$1$2="${imageUrl}"`
+          )
+        }
+      }
+      // Fallback: directly update href inside pattern
+      return svg.replace(
+        new RegExp(`(<pattern[^>]*id="${patternId}"[^>]*>[\\s\\S]*?<image[^>]*)(xlink:href|href)="[^"]*"`),
+        `$1$2="${imageUrl}"`
+      )
+    }
+  }
+
+  // --- Case 3: direct <image id="manny-img-*"> element ---
   return svg.replace(
     new RegExp(`(<[^>]+id="${fieldId}"[^>]*)(href|xlink:href)="[^"]*"`),
     `$1$2="${imageUrl}"`
