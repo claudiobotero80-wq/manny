@@ -72,6 +72,38 @@ En Figma, los nombres de capa son los IDs del SVG exportado. Para renombrar una 
 
 ---
 
+## manny-multiline-[id] — Texto multilínea con word wrap automático
+
+**Cuándo usarlo:** descripciones, taglines largas, bloques de texto donde el contenido puede variar en longitud.
+
+**Diferencia con `manny-text-[id]`:**
+- `manny-text-titulo` → una sola línea (el usuario escribe y el texto se mantiene en la misma línea)
+- `manny-multiline-descripcion` → el texto se distribuye automáticamente en múltiples líneas según el ancho de la columna
+
+**Cómo configurarlo en Figma — paso a paso:**
+
+1. Creá un elemento de texto con contenido de ejemplo **que ocupe al menos 2 líneas** (esto es crítico)
+   - Ejemplo: "Milanesa napolitana con papas fritas" en dos líneas, no en una sola
+   - El sistema usa ese texto para calcular el ancho disponible de la columna
+2. Asegurate de que el texto de ejemplo **llene el ancho que querés** — si el texto de ejemplo es corto, el sistema va a calcular una columna angosta
+3. Renombrá la capa: `manny-multiline-descripcion`
+
+**Por qué necesita 2 líneas de ejemplo:**
+Cuando exportás el SVG, Figma genera un `<tspan>` por línea, cada uno con su propia coordenada Y. El sistema lee el delta entre el Y de la primera y segunda línea para saber el `line-height`. Sin ese delta, usa un fallback de `fontSize × 1.25` que puede no coincidir con tu diseño.
+
+```
+Ejemplo correcto (2 tspans → el sistema puede calcular line-height):
+  <tspan x="115" y="778">Milanesa napolitana</tspan>       ← Y = 778
+  <tspan x="115" y="838">con papas fritas</tspan>          ← Y = 838 → delta = 60px
+
+Ejemplo incorrecto (1 solo tspan → sin delta, usa fallback):
+  <tspan x="115" y="778">Milanesa napolitana con papas fritas</tspan>
+```
+
+**En el wizard:** aparece como un `<textarea>` donde el usuario escribe libremente. El texto se distribuye automáticamente en las líneas necesarias respetando el ancho del diseño.
+
+---
+
 ## manny-color-[id] — Campos de color
 
 **Cuándo usarlo:** cuando querés que el usuario pueda cambiar el color de ciertos elementos (fondo, acento, textos decorativos, bordes, íconos).
