@@ -150,6 +150,39 @@ Registro cronológico de bugs, fixes, decisiones técnicas y deploys.
 
 ---
 
+---
+
+## 2026-03-15 — BUG-006 + BUG-007: SVG renderer fixes
+**Arqui** — Sesión `89905427`
+
+### BUG-006: Texto invisible en live preview del wizard
+- **Causa:** `/api/render-svg` usa `@resvg/resvg-wasm` para SVG→PNG. resvg no carga fuentes externas de Figma → texto renderiza invisible en la preview.
+- **Fix Parte A (client-side preview):** `src/components/wizard/LivePreview.tsx`
+  - Cuando `svgUrl` está definido, se fetcha el SVG raw una vez al montar (o cuando cambia `svgUrl`)
+  - Las sustituciones (color tokens + textos + imágenes) se aplican client-side con string replace
+  - La preview se muestra como `<img src="data:image/svg+xml;charset=utf-8,...">` — sin round-trip al server
+  - El debounce de 500ms existente se mantiene; el GET a `/api/render-svg` no se elimina (se usa para descarga)
+- **Fix Parte B (fallback font en renderer):** `src/lib/svg/renderer.ts`
+  - Antes del XML parse, inyecta `<style>text, tspan { font-family: sans-serif; }</style>` al SVG si no tiene ya `font-family: sans-serif`
+  - Esto hace que resvg use fuente disponible para el PNG final en la descarga
+
+### BUG-007: Imagen no se actualiza en preview
+- **Causa:** Figma exporta imágenes como `<rect id="manny-img-foto" fill="url(#patternXXX)">` con el `<image>` real dentro de `<defs><pattern id="patternXXX">`. El renderer hacía `el['@_href'] = value` sobre el `<rect>` → sin efecto.
+- **Fix server-side:** `src/lib/svg/renderer.ts`
+  - Nueva función `updatePatternImage(node, patternId, imageUrl)` que busca recursivamente el `<pattern id="patternId">` y actualiza el `@_href` y `@_xlink:href` del primer `<image>` adentro
+  - En el bloque `manny-img-*`/`manny-logo-*`, después de `mutateById`, se extrae el `fill="url(#...)"`, se parsea el patternId y se llama a `updatePatternImage`
+- **Fix client-side:** `src/components/wizard/LivePreview.tsx`
+  - `replaceImageInSvg(svg, fieldId, imageUrl)`: busca el elemento con el id, extrae el patternId del `fill="url(#...)"`, y reemplaza el `href` dentro del `<image>` correspondiente con regex
+  - Fallback: si no hay pattern, reemplaza `href`/`xlink:href` directamente en el elemento
+
+**Archivos modificados:**
+- `src/lib/svg/renderer.ts`
+- `src/components/wizard/LivePreview.tsx`
+
+**Commit:** `1cfa2d0`
+
+---
+
 ## Estado actual de deploys
 
 | Fecha | Commit | Descripción | Estado |
@@ -157,3 +190,4 @@ Registro cronológico de bugs, fixes, decisiones técnicas y deploys.
 | 2026-03-14 | `1a44aa8` | Fase 0 — build inicial | ✅ Live |
 | 2026-03-14 | `eaabc73` | Fase A — auth + checkout + download gate | ✅ Live |
 | 2026-03-15 | `6e502f5` | Fix admin template save (BUG-005) | ✅ Live |
+| 2026-03-15 | `1cfa2d0` | BUG-006 client SVG preview + BUG-007 pattern image | ✅ Live |
