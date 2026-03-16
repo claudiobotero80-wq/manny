@@ -183,6 +183,36 @@ Registro cronológico de bugs, fixes, decisiones técnicas y deploys.
 
 ---
 
+---
+
+## 2026-03-16 — Feature: eliminar template desde admin + botón "Cambiar template" en wizard
+**Arqui** — Sesión `457dda79`
+
+### Feature 1 — Eliminar template desde admin
+**Archivos:**
+- `src/app/api/admin/delete-template/route.ts` (nuevo) — POST `{ templateId }`, usa service role key
+  1. DELETE de `manny_templates` donde `id = templateId`
+  2. DELETE del archivo `{templateId}.svg` del bucket `templates` (404 aceptado)
+  3. Response: `{ success: true }` o error con status apropiado
+- `src/app/admin/templates/page.tsx` — actualizado:
+  - Al montar: carga lista de templates desde Supabase (anon key, public read)
+  - Sección "Templates existentes" con cards: nombre, ID, categoría + botón "Eliminar" (rojo, Trash2 icon)
+  - `window.confirm()` antes de ejecutar el delete
+  - Optimistic remove: filtra el template del estado local sin recargar
+  - Después de upload exitoso: refresca la lista
+
+### Feature 2 — Botón "Cambiar template" en wizard
+**Archivo:** `src/components/wizard/WizardLayout.tsx`
+- Header del wizard: row flex con "Volver al catálogo" (izq) y "← Cambiar template" (der)
+- "Cambiar template" navega a `/` (selector de templates)
+- Estilo: ghost/link discreto (`text-zinc-400 hover:text-zinc-600`), no compite con CTA principal
+- Sin confirmación — el progreso se pierde, es esperado
+
+**Build:** ✅ Sin errores TypeScript ni warnings de build
+**Commit:** `13d3e63`
+
+---
+
 ## Estado actual de deploys
 
 | Fecha | Commit | Descripción | Estado |
