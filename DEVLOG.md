@@ -239,6 +239,64 @@ Ahora: todos los color fields se agrupan en UN SOLO paso final.
 
 ---
 
+## 2026-03-16 — BUG-009: Fix Finalizar DEV_MODE (SVG templates)
+**Author:** Claudio (direct fix — 1 archivo, causa obvia)
+
+### BUG-009 — Botón "Finalizar" no descargaba el PNG
+**Causa:** `WizardLayout.tsx` en DEV_MODE mandaba `{ templateId, fields, colorScheme }` al endpoint `/api/render-svg`, pero ese endpoint espera `{ svgUrl, values, colorScheme }`. Params mal nombrados + falta `svgUrl`.
+
+**Fix:** Para SVG templates, DEV_MODE ahora envía:
+```ts
+{ svgUrl: (template as SvgTemplate).svgUrl, values, colorScheme }
+```
+Para JSX templates sigue igual (`{ templateId, fields, colorScheme }`).
+
+**Archivo:** `src/components/wizard/WizardLayout.tsx`
+**Commit:** `ba393e8`
+
+---
+
+## 2026-03-16 — Feature: manny-color-* en elementos sueltos (no solo grupos)
+**Author:** Claudio (direct fix)
+
+**Cambio:** Antes, `manny-color-*` solo detectaba grupos `<g>`. Ahora también funciona en elementos sueltos (`<rect>`, `<path>`, `<circle>`, etc.).
+
+- `src/lib/svg/parser.ts`: detecta `manny-color-*` en cualquier elemento
+- `src/components/wizard/LivePreview.tsx`: `replaceColorInSvg()` maneja ambos casos:
+  - Grupo `<g>`: reemplaza fill/stroke de todos los hijos
+  - Elemento suelto: reemplaza fill/stroke directamente en el elemento
+
+**Commits:** `b89d181` (fix), `ef7fbce` (docs)
+
+---
+
+## 2026-03-16 — Conocimiento operativo: Figma → SVG (acumulado)
+
+### Convención de capas (vigente)
+| ID de capa Figma | Tipo en wizard | Comportamiento |
+|---|---|---|
+| `manny-text-[nombre]` | texto | input, una línea |
+| `manny-multiline-[nombre]` | texto | textarea, word-wrap automático |
+| `manny-img-[nombre]` | imagen | upload + AI gen; centrada con xMidYMid slice |
+| `manny-logo-[nombre]` | logo | solo upload |
+| `manny-color-[nombre]` | color | picker; funciona en `<g>` y en elemento suelto |
+
+### Reglas Figma para export limpio
+1. `manny-color-*` → NO usar masks ni clip-path dentro del grupo. Si el layer tiene Frame type → Flatten (Cmd+E) antes de exportar.
+2. `manny-multiline-*` → el texto ejemplo debe tener ≥2 líneas (para exportar 2 tspans y calcular lineHeight).
+3. Texto con color variable → anidar `manny-text-titulo` dentro de grupo `manny-color-acento`; ambos IDs se procesan independientemente.
+4. Imagen → Figma exporta como `<g id="manny-img-foto">` con `<rect fill="url(#pattern)">` interno.
+5. Layer con tipo Frame en Figma puede exportar con `<clipPath>` wrapper → Flatten antes.
+
+### Issues conocidos sin fix de código
+- **z-order con Figma mask groups:** Si `manny-color-*` contiene un mask (icono de máscara en Figma), el SVG exportado puede tener z-order inesperado. Workaround: no usar masks dentro de grupos `manny-color-*`; usar Flatten o Boolean Operations para shapes complejas.
+
+### Pendiente de producto (Juan analizando flow)
+- **Watermark en preview:** Agregar overlay semitransparente con texto "PREVIEW" sobre el LivePreview para desincentivar capturas de pantalla. El PNG final (post-pago) va sin watermark. Pendiente hasta que Juan defina el flujo completo + UI definitiva.
+- **Previsualización admin:** Muestra SVG raw de Figma — puede verse desordenado. Esto es esperado; el wizard aplica todos los fixes al renderizar. No requiere cambio.
+
+---
+
 ## Estado actual de deploys
 
 | Fecha | Commit | Descripción | Estado |
@@ -247,6 +305,13 @@ Ahora: todos los color fields se agrupan en UN SOLO paso final.
 | 2026-03-14 | `eaabc73` | Fase A — auth + checkout + download gate | ✅ Live |
 | 2026-03-15 | `6e502f5` | Fix admin template save (BUG-005) | ✅ Live |
 | 2026-03-15 | `1cfa2d0` | BUG-006 client SVG preview + BUG-007 pattern image | ✅ Live |
+| 2026-03-16 | `13d3e63` | Admin delete template + wizard back button | ✅ Live |
+| 2026-03-16 | `1c841e4` | (push adicional) | ✅ Live |
+| 2026-03-16 | `7fcf2b1` | manny-color-* sistema dinámico | ✅ Live |
+| 2026-03-16 | `a95e37f` | Auto word-wrap canvas.measureText() | ✅ Live |
+| 2026-03-16 | `b89d181` | manny-color-* en elementos sueltos | ✅ Live |
+| 2026-03-16 | `79843a3` | Color step unificado en wizard | ✅ Live |
+| 2026-03-16 | `ba393e8` | Fix BUG-009: Finalizar DEV_MODE SVG templates | ✅ Live |
 
 ---
 
