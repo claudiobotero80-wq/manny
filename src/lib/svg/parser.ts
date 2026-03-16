@@ -18,20 +18,32 @@ function humanize(suffix: string): string {
     .trim()
 }
 
-/** Extract first valid fill color from inside a <g id="manny-color-*"> group */
-function extractDefaultColor(svgContent: string, groupId: string): string {
+/** Extract default fill color for a manny-color-* field.
+ * Works for both <g id="..."> groups and single elements like <rect id="...">.
+ */
+function extractDefaultColor(svgContent: string, fieldId: string): string {
+  // Case 1: group element — look inside the group for first valid fill
   const groupMatch = svgContent.match(
-    new RegExp(`<g[^>]*id="${groupId}"[^>]*>([\\s\\S]*?)</g>`)
+    new RegExp(`<g[^>]*id="${fieldId}"[^>]*>([\\s\\S]*?)</g>`)
   )
-  if (!groupMatch) return '#000000'
-  const groupContent = groupMatch[1]
-  const fillMatches = groupContent.matchAll(/fill="([^"]+)"/g)
-  for (const match of fillMatches) {
-    const fill = match[1]
-    if (fill !== 'none' && !fill.startsWith('url(')) {
-      return fill
+  if (groupMatch) {
+    const groupContent = groupMatch[1]
+    for (const match of groupContent.matchAll(/fill="([^"]+)"/g)) {
+      if (match[1] !== 'none' && !match[1].startsWith('url(')) return match[1]
     }
   }
+
+  // Case 2: single element — extract fill directly from the element tag
+  const elemMatch = svgContent.match(
+    new RegExp(`<[^>]+id="${fieldId}"[^>]*>`)
+  )
+  if (elemMatch) {
+    const fillMatch = elemMatch[0].match(/fill="([^"]+)"/)
+    if (fillMatch && fillMatch[1] !== 'none' && !fillMatch[1].startsWith('url(')) {
+      return fillMatch[1]
+    }
+  }
+
   return '#000000'
 }
 

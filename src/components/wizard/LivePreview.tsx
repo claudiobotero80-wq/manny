@@ -17,20 +17,27 @@ interface LivePreviewProps {
  * Skips fill="none" and fill="url(...)" (patterns/gradients).
  */
 function replaceColorInSvg(svg: string, fieldId: string, colorValue: string): string {
+  // Case 1: <g id="manny-color-*"> group — replace fill/stroke on all children
   const groupMatch = svg.match(
     new RegExp(`(<g[^>]*id="${fieldId}"[^>]*>)([\\s\\S]*?)(</g>)`)
   )
-  if (!groupMatch) return svg
+  if (groupMatch) {
+    const [fullMatch, open, inner, close] = groupMatch
+    const updatedInner = inner
+      .replace(/fill="([^"]+)"/g, (m, val) =>
+        val === 'none' || val.startsWith('url(') ? m : `fill="${colorValue}"`
+      )
+      .replace(/stroke="([^"]+)"/g, (m, val) =>
+        val === 'none' || val.startsWith('url(') ? m : `stroke="${colorValue}"`
+      )
+    return svg.replace(fullMatch, `${open}${updatedInner}${close}`)
+  }
 
-  const [fullMatch, open, inner, close] = groupMatch
-  const updatedInner = inner
-    .replace(/fill="([^"]+)"/g, (m, val) =>
-      val === 'none' || val.startsWith('url(') ? m : `fill="${colorValue}"`
-    )
-    .replace(/stroke="([^"]+)"/g, (m, val) =>
-      val === 'none' || val.startsWith('url(') ? m : `stroke="${colorValue}"`
-    )
-  return svg.replace(fullMatch, `${open}${updatedInner}${close}`)
+  // Case 2: single element (e.g. <rect id="manny-color-fondo">) — replace fill on the tag itself
+  return svg.replace(
+    new RegExp(`(<[^>]+id="${fieldId}"[^>]*?)fill="[^"]*"`),
+    `$1fill="${colorValue}"`
+  )
 }
 
 /** Apply color token replacements to SVG string (JSX templates with colorScheme) */
