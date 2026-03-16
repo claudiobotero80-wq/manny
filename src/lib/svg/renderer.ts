@@ -69,12 +69,60 @@ function mutateById(
 }
 
 /**
+ * BUG-007 fix: Update the href of the first <image> inside a <pattern> with the given id.
+ * Figma exports images as <rect fill="url(#patternXXX)"> with the actual <image> inside <defs><pattern>.
+ */
+function updatePatternImage(
+  node: unknown,
+  patternId: string,
+  imageUrl: string
+): boolean {
+  if (!node || typeof node !== 'object') return false
+
+  const obj = node as Record<string, unknown>
+
+  // Check if this node is a <pattern> with the target id
+  const nodeId = obj['@_id'] as string | undefined
+  if (nodeId === patternId) {
+    // Find the first <image> inside this pattern and update its href
+    const imageEl = obj['image'] as Record<string, unknown> | undefined
+    if (imageEl) {
+      imageEl['@_href'] = imageUrl
+      imageEl['@_xlink:href'] = imageUrl
+      return true
+    }
+    // Could be an array of images
+    const images = obj['image'] as Array<Record<string, unknown>> | undefined
+    if (Array.isArray(images) && images.length > 0) {
+      images[0]['@_href'] = imageUrl
+      images[0]['@_xlink:href'] = imageUrl
+      return true
+    }
+  }
+
+  // Recurse into children
+  for (const key of Object.keys(obj)) {
+    const value = obj[key]
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (updatePatternImage(item, patternId, imageUrl)) return true
+      }
+    } else if (value && typeof value === 'object') {
+      if (updatePatternImage(value, patternId, imageUrl)) return true
+    }
+  }
+
+  return false
+}
+
+/**
  * Render an SVG template with field values and color scheme.
  *
  * Strategy:
  * 1. String-replace color tokens first (simple & reliable)
- * 2. Parse XML and mutate field values
- * 3. Serialize back to SVG string
+ * 2. Inject fallback font style for resvg (BUG-006 Part B)
+ * 3. Parse XML and mutate field values
+ * 4. Serialize back to SVG string
  */
 export function renderSvg(
   svgContent: string,
@@ -83,6 +131,15 @@ export function renderSvg(
 ): string {
   // Step 1: Replace color tokens globally (before XML parsing)
   let svg = applyColorTokens(svgContent, colorScheme)
+
+  // Step 2: BUG-006 Part B — inject fallback font style so resvg renders text
+  // when Figma's external fonts are unavailable
+  if (!svg.includes('font-family: sans-serif')) {
+    svg = svg.replace(
+      '</svg>',
+      '<style>text, tspan { font-family: sans-serif; }</style></svg>'
+    )
+  }
 
   const parser = new XMLParser({
     ignoreAttributes: false,
@@ -108,7 +165,7 @@ export function renderSvg(
     return svgContent
   }
 
-  // Step 2: Apply field values
+  // Step 3: Apply field values
   for (const [fieldId, value] of Object.entries(values)) {
     if (!value) continue
 
@@ -137,18 +194,27 @@ export function renderSvg(
       fieldId.startsWith('manny-img-') ||
       fieldId.startsWith('manny-logo-')
     ) {
-      // Image replacement: update href or xlink:href on <image> element
-      // or convert <rect> to <image>
+      // BUG-007 fix: Image replacement
+      // Figma exports images as <rect fill="url(#patternXXX)"> with the real
+      // <image> inside <defs><pattern id="patternXXX">. We need to update both.
       mutateById(parsed, fieldId, (el) => {
-        // If it's already an image element, update href
+        // Update href directly (handles actual <image> elements)
         el['@_href'] = value
         el['@_xlink:href'] = value
-        // Make sure it preserves dimensions (width/height attrs stay)
+
+        // Check if this element references a pattern (Figma's typical export)
+        const fill = el['@_fill'] as string | undefined
+        if (fill) {
+          const match = fill.match(/url\(#([^)]+)\)/)
+          if (match) {
+            updatePatternImage(parsed, match[1], value)
+          }
+        }
       })
     }
   }
 
-  // Step 3: Serialize back
+  // Step 4: Serialize back
   try {
     const result = builder.build(parsed) as string
     return result
