@@ -128,6 +128,30 @@ Ejemplo incorrecto (1 solo tspan → sin delta, usa fallback):
 
 **Nota:** elementos con `fill="none"` o `fill="url(...)"` dentro del grupo se ignoran (no se rompen transparencias ni patterns).
 
+### Texto con color variable
+
+Si un texto necesita ser editable Y tener color dinámico, usás ambas convenciones a la vez:
+
+1. El text layer se llama `manny-text-titulo` (controla el contenido)
+2. Lo agrupás (Cmd+G) y al grupo le ponés `manny-color-acento` (controla el color)
+
+```
+Figma layers:
+└── manny-color-acento  (grupo — controla color)
+    └── manny-text-titulo  (texto — controla contenido)
+```
+
+SVG resultante:
+```xml
+<g id="manny-color-acento">
+  <text id="manny-text-titulo" fill="#FF6600" ...>
+    <tspan x="115" y="778">Título de ejemplo</tspan>
+  </text>
+</g>
+```
+
+El wizard genera un campo de texto para `manny-text-titulo` y un color picker para `manny-color-acento`. Funcionan de forma independiente — el usuario edita el texto Y elige el color por separado.
+
 ---
 
 ## Estructura recomendada del diseño
